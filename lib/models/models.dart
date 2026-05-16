@@ -31,6 +31,8 @@ class Transaction {
   final DateTime date;
   final String categoryId;
   final String? note;
+  // true = transfer antar dompet, TIDAK masuk budget expense
+  final bool isTransfer;
 
   Transaction({
     required this.id,
@@ -41,7 +43,30 @@ class Transaction {
     required this.date,
     required this.categoryId,
     this.note,
+    this.isTransfer = false,
   });
+
+  Transaction copyWith({
+    String? title,
+    double? amount,
+    TransactionType? type,
+    PaymentMethod? paymentMethod,
+    DateTime? date,
+    String? categoryId,
+    String? note,
+  }) {
+    return Transaction(
+      id: id,
+      title: title ?? this.title,
+      amount: amount ?? this.amount,
+      type: type ?? this.type,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
+      date: date ?? this.date,
+      categoryId: categoryId ?? this.categoryId,
+      note: note ?? this.note,
+      isTransfer: isTransfer,
+    );
+  }
 }
 
 class BudgetSummary {

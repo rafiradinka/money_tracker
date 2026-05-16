@@ -91,6 +91,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet>
     }
 
     final tabIndex = _tabController.index;
+    final description = _noteController.text.trim();
 
     if (tabIndex == 2) {
       state.addTransfer(
@@ -98,30 +99,28 @@ class _AddTransactionSheetState extends State<AddTransactionSheet>
         from: _paymentMethod,
         to: _transferTo,
         date: _selectedDate,
-        note: _noteController.text.isEmpty ? null : _noteController.text,
+        note: description.isEmpty ? null : description,
       );
     } else {
       final type = tabIndex == 0
           ? TransactionType.expense
           : TransactionType.income;
 
-      final titles = {
-        'food': 'Food',
-        'transport': 'Transportation',
-        'entertaint': 'Entertainment',
-        'shop': 'Shopping',
-        'health': 'Health',
-      };
+      // Fallback ke nama category jika deskripsi kosong
+      final category = state.getCategoryById(_selectedCategoryId);
+      final title = description.isEmpty
+          ? (category?.name ?? _selectedCategoryId)
+          : description;
 
       state.addTransaction(Transaction(
         id: _uuid.v4(),
-        title: titles[_selectedCategoryId] ?? _selectedCategoryId,
+        title: title,           // ← ini yang tampil di history
         amount: amount,
         type: type,
         paymentMethod: _paymentMethod,
         date: _selectedDate,
         categoryId: _selectedCategoryId,
-        note: _noteController.text.isEmpty ? null : _noteController.text,
+        note: description.isEmpty ? null : description,
       ));
     }
 
@@ -430,9 +429,21 @@ class _AddTransactionSheetState extends State<AddTransactionSheet>
                         ),
                       ),
 
-                      // ── Notes ───────────────────────────────────────────
+                      // ── Description / Catatan ──────────────────────────
                       const SizedBox(height: 20),
-                      _sectionLabel('Notes'),
+                      Row(
+                        children: [
+                          _sectionLabel('Deskripsi'),
+                          const SizedBox(width: 6),
+                          const Text(
+                            '· akan tampil di riwayat',
+                            style: TextStyle(
+                              color: AppColors.greyDark,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 10),
                       Container(
                         decoration: BoxDecoration(
@@ -445,8 +456,9 @@ class _AddTransactionSheetState extends State<AddTransactionSheet>
                           style: const TextStyle(
                               color: AppColors.white, fontSize: 14),
                           decoration: const InputDecoration(
-                            hintText: 'Add a note...',
-                            hintStyle: TextStyle(color: AppColors.greyDark),
+                            hintText: 'Contoh: ganti oli, makan siang, dll...',
+                            hintStyle: TextStyle(
+                                color: AppColors.greyDark, fontSize: 13),
                             border: InputBorder.none,
                             contentPadding: EdgeInsets.symmetric(
                                 horizontal: 14, vertical: 12),

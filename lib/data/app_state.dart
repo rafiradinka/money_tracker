@@ -23,11 +23,13 @@ class AppState extends ChangeNotifier {
   List<Transaction> get transactions => _transactions;
   List<Category> get categories => _categories;
 
+  // Budget hanya dari EXPENSE yang BUKAN transfer
   double get totalSpentThisMonth {
     final now = DateTime.now();
     return _transactions
         .where((t) =>
             t.type == TransactionType.expense &&
+            !t.isTransfer &&
             t.date.month == now.month &&
             t.date.year == now.year)
         .fold(0.0, (sum, t) => sum + t.amount);
@@ -82,6 +84,7 @@ class AppState extends ChangeNotifier {
         paymentMethod: PaymentMethod.cash,
         date: now,
         categoryId: 'transport',
+        note: 'Bensin Pertalite',
       ),
       Transaction(
         id: _uuid.v4(),
@@ -91,24 +94,27 @@ class AppState extends ChangeNotifier {
         paymentMethod: PaymentMethod.cash,
         date: now.subtract(const Duration(hours: 3)),
         categoryId: 'food',
+        note: 'Makan Siang',
       ),
       Transaction(
         id: _uuid.v4(),
-        title: 'Netflix',
+        title: 'Langganan Netflix',
         amount: 54000,
         type: TransactionType.expense,
         paymentMethod: PaymentMethod.card,
         date: now.subtract(const Duration(days: 1)),
         categoryId: 'entertaint',
+        note: 'Langganan Netflix',
       ),
       Transaction(
         id: _uuid.v4(),
-        title: 'Belanja Online',
+        title: 'Beli Baju Online',
         amount: 150000,
         type: TransactionType.expense,
         paymentMethod: PaymentMethod.card,
         date: now.subtract(const Duration(days: 2)),
         categoryId: 'shop',
+        note: 'Beli Baju Online',
       ),
       Transaction(
         id: _uuid.v4(),
@@ -118,22 +124,27 @@ class AppState extends ChangeNotifier {
         paymentMethod: PaymentMethod.card,
         date: DateTime(now.year, now.month, 1),
         categoryId: 'food',
+        note: 'Gaji Bulanan',
       ),
       Transaction(
         id: _uuid.v4(),
-        title: 'Apotek',
+        title: 'Beli Obat Apotek',
         amount: 75000,
         type: TransactionType.expense,
         paymentMethod: PaymentMethod.cash,
         date: now.subtract(const Duration(days: 3)),
         categoryId: 'health',
+        note: 'Beli Obat Apotek',
       ),
     ];
   }
 
+  // ── ADD ───────────────────────────────────────────────────────────────────────
+
   void addTransaction(Transaction transaction) {
     _transactions.add(transaction);
-    if (transaction.type == TransactionType.expense) {
+    // Hanya expense non-transfer yang masuk budget kategori
+    if (transaction.type == TransactionType.expense && !transaction.isTransfer) {
       final idx = _categories.indexWhere((c) => c.id == transaction.categoryId);
       if (idx != -1) _categories[idx].spent += transaction.amount;
     }
@@ -151,28 +162,110 @@ class AppState extends ChangeNotifier {
   }) {
     _adjustBalance(from, -amount);
     _adjustBalance(to, amount);
+    // Catat sebagai dua entri dengan isTransfer=true → tidak masuk budget
     _transactions.add(Transaction(
       id: _uuid.v4(),
-      title: 'Transfer → ${_methodName(to)}',
+      title: note?.isNotEmpty == true ? note! : 'Transfer → ${_methodName(to)}',
       amount: amount,
       type: TransactionType.expense,
       paymentMethod: from,
       date: date,
-      categoryId: 'transport',
+      categoryId: 'transfer',
       note: note,
+      isTransfer: true,
     ));
     _transactions.add(Transaction(
       id: _uuid.v4(),
-      title: 'Transfer ← ${_methodName(from)}',
+      title: note?.isNotEmpty == true ? note! : 'Transfer ← ${_methodName(from)}',
       amount: amount,
       type: TransactionType.income,
       paymentMethod: to,
       date: date,
-      categoryId: 'transport',
+      categoryId: 'transfer',
       note: note,
+      isTransfer: true,
     ));
     notifyListeners();
   }
+
+  // ── EDIT ──────────────────────────────────────────────────────────────────────
+
+  void editTransaction({
+    required String id,
+    required String newTitle,
+    required double newAmount,
+    required TransactionType newType,
+    required PaymentMethod newPaymentMethod,
+    required DateTime newDate,
+    required String newCategoryId,
+    String? newNote,
+  }) {
+    final idx = _transactions.indexWhere((t) => t.id == id);
+    if (idx == -1) return;
+
+    final old = _transactions[idx];
+
+    // Balik efek transaksi lama ke balance
+    final oldSign = old.type == TransactionType.expense ? -1 : 1;
+    _adjustBalance(old.paymentMethod, -oldSign * old.amount); // reverse
+
+    // Balik efek lama ke category spent (hanya expense non-transfer)
+    if (old.type == TransactionType.expense && !old.isTransfer) {
+      final catIdx = _categories.indexWhere((c) => c.id == old.categoryId);
+      if (catIdx != -1) _categories[catIdx].spent -= old.amount;
+    }
+
+    // Terapkan transaksi baru
+    final updated = Transaction(
+      id: id,
+      title: newTitle,
+      amount: newAmount,
+      type: newType,
+      paymentMethod: newPaymentMethod,
+      date: newDate,
+      categoryId: newCategoryId,
+      note: newNote,
+      isTransfer: old.isTransfer,
+    );
+
+    _transactions[idx] = updated;
+
+    // Terapkan efek baru ke balance
+    final newSign = newType == TransactionType.expense ? -1 : 1;
+    _adjustBalance(newPaymentMethod, newSign * newAmount);
+
+    // Terapkan efek baru ke category spent
+    if (newType == TransactionType.expense && !old.isTransfer) {
+      final catIdx = _categories.indexWhere((c) => c.id == newCategoryId);
+      if (catIdx != -1) _categories[catIdx].spent += newAmount;
+    }
+
+    notifyListeners();
+  }
+
+  // ── DELETE ────────────────────────────────────────────────────────────────────
+
+  void deleteTransaction(String id) {
+    final idx = _transactions.indexWhere((t) => t.id == id);
+    if (idx == -1) return;
+
+    final t = _transactions[idx];
+
+    // Balik balance
+    final sign = t.type == TransactionType.expense ? -1 : 1;
+    _adjustBalance(t.paymentMethod, -sign * t.amount);
+
+    // Balik category spent
+    if (t.type == TransactionType.expense && !t.isTransfer) {
+      final catIdx = _categories.indexWhere((c) => c.id == t.categoryId);
+      if (catIdx != -1) _categories[catIdx].spent -= t.amount;
+    }
+
+    _transactions.removeAt(idx);
+    notifyListeners();
+  }
+
+  // ── HELPERS ───────────────────────────────────────────────────────────────────
 
   void _adjustBalance(PaymentMethod method, double delta) {
     switch (method) {
