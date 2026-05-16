@@ -19,21 +19,21 @@ class CircularBudgetChart extends StatelessWidget {
   });
 
   String _formatAmount(double amount) {
-    if (amount >= 1000000) return '${(amount / 1000000).toStringAsFixed(1)}M';
-    if (amount >= 1000) return '${(amount / 1000).toStringAsFixed(0)}k';
+    if (amount >= 1000000) {
+      return '${(amount / 1000000).toStringAsFixed(1)}M';
+    } else if (amount >= 1000) {
+      return '${(amount / 1000).toStringAsFixed(0)}k';
+    }
     return amount.toStringAsFixed(0);
   }
 
   @override
   Widget build(BuildContext context) {
-    final isOver = percentage > 1.0;
-    final arcColor = isOver ? AppColors.red : AppColors.orange;
     return SizedBox(
       width: size,
       height: size,
       child: CustomPaint(
-        painter: _CirclePainter(
-            percentage: percentage.clamp(0.0, 1.0), color: arcColor),
+        painter: _CirclePainter(percentage: percentage),
         child: showLabel
             ? Center(
                 child: Column(
@@ -42,7 +42,7 @@ class CircularBudgetChart extends StatelessWidget {
                     Text(
                       _formatAmount(spent),
                       style: TextStyle(
-                        color: arcColor,
+                        color: AppColors.orange,
                         fontSize: size * 0.18,
                         fontWeight: FontWeight.bold,
                       ),
@@ -65,9 +65,8 @@ class CircularBudgetChart extends StatelessWidget {
 
 class _CirclePainter extends CustomPainter {
   final double percentage;
-  final Color color;
 
-  _CirclePainter({required this.percentage, required this.color});
+  _CirclePainter({required this.percentage});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -75,23 +74,27 @@ class _CirclePainter extends CustomPainter {
     final radius = size.width / 2 - 10;
     const strokeWidth = 12.0;
 
+    // Background circle
     final bgPaint = Paint()
       ..color = AppColors.greyDark.withOpacity(0.4)
       ..strokeWidth = strokeWidth
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
+
     canvas.drawCircle(center, radius, bgPaint);
 
+    // Progress arc
     final progressPaint = Paint()
-      ..color = color
+      ..color = AppColors.orange
       ..strokeWidth = strokeWidth
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
 
+    final sweepAngle = 2 * pi * percentage;
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius),
       -pi / 2,
-      2 * pi * percentage,
+      sweepAngle,
       false,
       progressPaint,
     );
@@ -102,7 +105,7 @@ class _CirclePainter extends CustomPainter {
 }
 
 class LargeCircularChart extends StatelessWidget {
-  final double percentage; // bisa > 1.0
+  final double percentage;
   final double size;
 
   const LargeCircularChart({
@@ -113,33 +116,28 @@ class LargeCircularChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isOver = percentage > 1.0;
-    final arcColor = isOver ? AppColors.red : AppColors.orange;
-    final displayPct = (percentage * 100).round();
-
     return SizedBox(
       width: size,
       height: size,
       child: CustomPaint(
-        painter: _LargeCirclePainter(
-            percentage: percentage.clamp(0.0, 1.0), color: arcColor),
+        painter: _LargeCirclePainter(percentage: percentage),
         child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                '$displayPct%',
+                '${(percentage * 100).round()}%',
                 style: TextStyle(
-                  color: arcColor,
-                  fontSize: size * 0.18,
+                  color: AppColors.orange,
+                  fontSize: size * 0.2,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               Text(
-                isOver ? 'Over!' : 'Used',
+                'Used',
                 style: TextStyle(
-                  color: isOver ? AppColors.red : AppColors.grey,
-                  fontSize: size * 0.09,
+                  color: AppColors.grey,
+                  fontSize: size * 0.1,
                 ),
               ),
             ],
@@ -152,9 +150,8 @@ class LargeCircularChart extends StatelessWidget {
 
 class _LargeCirclePainter extends CustomPainter {
   final double percentage;
-  final Color color;
 
-  _LargeCirclePainter({required this.percentage, required this.color});
+  _LargeCirclePainter({required this.percentage});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -167,18 +164,20 @@ class _LargeCirclePainter extends CustomPainter {
       ..strokeWidth = strokeWidth
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
+
     canvas.drawCircle(center, radius, bgPaint);
 
     final progressPaint = Paint()
-      ..color = color
+      ..color = AppColors.orange
       ..strokeWidth = strokeWidth
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
 
+    final sweepAngle = 2 * pi * percentage;
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius),
       -pi / 2,
-      2 * pi * percentage,
+      sweepAngle,
       false,
       progressPaint,
     );

@@ -17,86 +17,68 @@ class CategoryProgressItem extends StatelessWidget {
     final isOver = category.isOverBudget;
     final progressColor = isOver ? AppColors.red : AppColors.orange;
 
-    // Persentase untuk teks (bisa > 100%)
-    final pctDisplay = category.budget > 0
-        ? (category.spent / category.budget * 100).round()
-        : 0;
-
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
+      child: Column(
         children: [
-          Text(category.icon, style: const TextStyle(fontSize: 20)),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Row(
+            children: [
+              Text(
+                category.icon,
+                style: const TextStyle(fontSize: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Nama + edit hint
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
                           category.name,
                           style: const TextStyle(
-                              color: AppColors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500),
-                        ),
-                        const SizedBox(width: 6),
-                        const Icon(Icons.edit_outlined,
-                            color: AppColors.greyDark, size: 13),
-                      ],
-                    ),
-                    // Amount + persentase
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          formatRupiah(category.spent),
-                          style: TextStyle(
-                            color: isOver ? AppColors.red : AppColors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
+                            color: AppColors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
-                        Row(
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
+                            Text(
+                              formatRupiah(category.spent),
+                              style: TextStyle(
+                                color: isOver ? AppColors.red : AppColors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                             Text(
                               'of ${formatRupiah(category.budget)}',
                               style: const TextStyle(
-                                  color: AppColors.grey, fontSize: 10),
-                            ),
-                            if (isOver) ...[
-                              const SizedBox(width: 4),
-                              Text(
-                                '$pctDisplay%',
-                                style: const TextStyle(
-                                    color: AppColors.red,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold),
+                                color: AppColors.grey,
+                                fontSize: 10,
                               ),
-                            ],
+                            ),
                           ],
                         ),
                       ],
                     ),
+                    const SizedBox(height: 6),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: category.percentage,
+                        backgroundColor: AppColors.greyDark.withOpacity(0.4),
+                        valueColor: AlwaysStoppedAnimation<Color>(progressColor),
+                        minHeight: 5,
+                      ),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: category.percentage, // sudah di-clamp 0..1
-                    backgroundColor: AppColors.greyDark.withOpacity(0.4),
-                    valueColor: AlwaysStoppedAnimation<Color>(progressColor),
-                    minHeight: 5,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ],
       ),
