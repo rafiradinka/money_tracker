@@ -214,17 +214,76 @@ class _EditTransactionSheetState extends State<_EditTransactionSheet> {
     );
 
     if (!result.success) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(result.errorMessage ?? 'Terjadi kesalahan'),
-        backgroundColor: const Color(0xFFF44336),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
-      ));
+      _showBalanceError(result.errorMessage ?? 'Terjadi kesalahan');
       return;
     }
 
     Navigator.pop(context);
+  }
+
+  void _showBalanceError(String message) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF2C2C2C),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFF44336).withOpacity(0.4), width: 1.5),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 56, height: 56,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF44336).withOpacity(0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.account_balance_wallet_outlined,
+                    color: Color(0xFFF44336), size: 28),
+              ),
+              const SizedBox(height: 16),
+              const Text('Saldo Tidak Cukup',
+                  style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 10),
+              ...message.split('\n').map((line) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(line,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: line.startsWith('Dibutuhkan')
+                          ? const Color(0xFFF44336)
+                          : line.startsWith('Tersedia') ? const Color(0xFF4CAF50)
+                          : const Color(0xFF9E9E9E),
+                      fontSize: 13,
+                      fontWeight: (line.startsWith('Tersedia') || line.startsWith('Dibutuhkan'))
+                          ? FontWeight.w600 : FontWeight.normal,
+                    )),
+              )),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFF44336),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    elevation: 0,
+                  ),
+                  child: const Text('Mengerti',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _delete() {

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../models/models.dart';
+import 'storage_service.dart';
 
-// Return type untuk validasi saldo
 class BalanceResult {
   final bool success;
   final String? errorMessage;
@@ -11,30 +11,30 @@ class BalanceResult {
 }
 
 class AppState extends ChangeNotifier {
-  final _uuid = const Uuid();
+  final _uuid    = const Uuid();
+  final _storage = StorageService.instance;
 
-  String userName = 'Radinka';
-
-  double _cashBalance = 800000;
-  double _cardBalance = 12000000;
+  String _userName      = '';
+  double _cashBalance   = 800000;
+  double _cardBalance   = 12000000;
   double _eMoneyBalance = 0;
 
   List<Transaction> _transactions = [];
-  List<Category> _categories = [];
+  List<Category>    _categories   = [];
 
-  double get cashBalance => _cashBalance;
-  double get cardBalance => _cardBalance;
+  // ── Getters ───────────────────────────────────────────────────────────────
+  String get userName      => _userName;
+  double get cashBalance   => _cashBalance;
+  double get cardBalance   => _cardBalance;
   double get eMoneyBalance => _eMoneyBalance;
-  double get totalBalance => _cashBalance + _cardBalance + _eMoneyBalance;
+  double get totalBalance  => _cashBalance + _cardBalance + _eMoneyBalance;
 
-  List<Transaction> get transactions => _transactions;
-  List<Category> get categories => _categories;
+  List<Transaction> get transactions => List.unmodifiable(_transactions);
+  List<Category>    get categories   => List.unmodifiable(_categories);
 
-  // Monthly budget = total budget semua kategori
   double get monthlyBudget =>
-      _categories.fold(0.0, (sum, c) => sum + c.budget);
+      _categories.fold(0.0, (s, c) => s + c.budget);
 
-  // Total spent bulan ini (expense non-transfer saja)
   double get totalSpentThisMonth {
     final now = DateTime.now();
     return _transactions
@@ -43,116 +43,94 @@ class AppState extends ChangeNotifier {
             !t.isTransfer &&
             t.date.month == now.month &&
             t.date.year == now.year)
-        .fold(0.0, (sum, t) => sum + t.amount);
+        .fold(0.0, (s, t) => s + t.amount);
   }
 
-  BudgetSummary get budgetSummary => BudgetSummary(
-        monthlyBudget: monthlyBudget,
-        totalSpent: totalSpentThisMonth,
-      );
+  BudgetSummary get budgetSummary =>
+      BudgetSummary(monthlyBudget: monthlyBudget, totalSpent: totalSpentThisMonth);
 
   double get averagePerDay {
-    final now = DateTime.now();
-    final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
-    final budget = monthlyBudget;
-    return budget > 0 ? budget / daysInMonth : 0;
+    final days = DateTime(DateTime.now().year, DateTime.now().month + 1, 0).day;
+    return monthlyBudget > 0 ? monthlyBudget / days : 0;
   }
 
   double get safeRatePerDay {
-    final now = DateTime.now();
-    final remainingDays =
-        DateTime(now.year, now.month + 1, 0).day - now.day + 1;
-    final remaining = monthlyBudget - totalSpentThisMonth;
-    if (remainingDays <= 0) return 0;
-    return (remaining / remainingDays).clamp(0, double.infinity);
+    final now  = DateTime.now();
+    final left = DateTime(now.year, now.month + 1, 0).day - now.day + 1;
+    final rem  = monthlyBudget - totalSpentThisMonth;
+    return left > 0 ? (rem / left).clamp(0, double.infinity) : 0;
   }
 
   List<Transaction> get latestTransactions {
-    final sorted = List<Transaction>.from(_transactions)
-      ..sort((a, b) => b.date.compareTo(a.date));
+    final sorted = [..._transactions]..sort((a, b) => b.date.compareTo(a.date));
     return sorted.take(10).toList();
   }
 
-  // ── Saldo per metode pembayaran ────────────────────────────────────────────
-  double balanceOf(PaymentMethod method) {
-    switch (method) {
-      case PaymentMethod.cash:
-        return _cashBalance;
-      case PaymentMethod.card:
-        return _cardBalance;
-      case PaymentMethod.emoney:
-        return _eMoneyBalance;
+  double balanceOf(PaymentMethod m) {
+    switch (m) {
+      case PaymentMethod.cash:   return _cashBalance;
+      case PaymentMethod.card:   return _cardBalance;
+      case PaymentMethod.emoney: return _eMoneyBalance;
     }
   }
 
   String methodName(PaymentMethod m) {
     switch (m) {
-      case PaymentMethod.cash:
-        return 'Cash';
-      case PaymentMethod.card:
-        return 'Card';
-      case PaymentMethod.emoney:
-        return 'E-Money';
+      case PaymentMethod.cash:   return 'Cash';
+      case PaymentMethod.card:   return 'Card';
+      case PaymentMethod.emoney: return 'E-Money';
     }
   }
 
-  // ── Init ──────────────────────────────────────────────────────────────────
-  AppState() {
-    _initSampleData();
+  // ── Init — load dari storage ───────────────────────────────────────────────
+  Future<void> loadFromStorage() async {
+    _userName      = _storage.userName;
+    _cashBalance   = _storage.cashBalance;
+    _cardBalance   = _storage.cardBalance;
+    _eMoneyBalance = _storage.eMoneyBalance;
+    _transactions  = List.from(_storage.transactions);
+    _categories    = List.from(_storage.categories);
+    notifyListeners();
   }
 
-  void _initSampleData() {
-    _categories = [
-      Category(id: 'food', name: 'Food', icon: '🍴', budget: 200000, spent: 120000),
-      Category(id: 'transport', name: 'Transportation', icon: '🚌', budget: 300000, spent: 220000),
-      Category(id: 'entertaint', name: 'Entertaint', icon: '😊', budget: 100000, spent: 120000),
-      Category(id: 'shop', name: 'Shop', icon: '🛒', budget: 200000, spent: 220000),
-      Category(id: 'health', name: 'Health', icon: '❤️', budget: 200000, spent: 120000),
-    ];
-    final now = DateTime.now();
-    _transactions = [
-      Transaction(id: _uuid.v4(), title: 'Bensin Pertalite', amount: 50000,
-          type: TransactionType.expense, paymentMethod: PaymentMethod.cash,
-          date: now, categoryId: 'transport', note: 'Bensin Pertalite'),
-      Transaction(id: _uuid.v4(), title: 'Makan Siang', amount: 35000,
-          type: TransactionType.expense, paymentMethod: PaymentMethod.cash,
-          date: now.subtract(const Duration(hours: 3)), categoryId: 'food', note: 'Makan Siang'),
-      Transaction(id: _uuid.v4(), title: 'Langganan Netflix', amount: 54000,
-          type: TransactionType.expense, paymentMethod: PaymentMethod.card,
-          date: now.subtract(const Duration(days: 1)), categoryId: 'entertaint', note: 'Langganan Netflix'),
-      Transaction(id: _uuid.v4(), title: 'Beli Baju Online', amount: 150000,
-          type: TransactionType.expense, paymentMethod: PaymentMethod.card,
-          date: now.subtract(const Duration(days: 2)), categoryId: 'shop', note: 'Beli Baju Online'),
-      Transaction(id: _uuid.v4(), title: 'Gaji Bulanan', amount: 5000000,
-          type: TransactionType.income, paymentMethod: PaymentMethod.card,
-          date: DateTime(now.year, now.month, 1), categoryId: 'food', note: 'Gaji Bulanan'),
-      Transaction(id: _uuid.v4(), title: 'Beli Obat Apotek', amount: 75000,
-          type: TransactionType.expense, paymentMethod: PaymentMethod.cash,
-          date: now.subtract(const Duration(days: 3)), categoryId: 'health', note: 'Beli Obat Apotek'),
-    ];
+  // ── User name ─────────────────────────────────────────────────────────────
+  Future<void> setUserName(String name) async {
+    _userName = name;
+    await _storage.saveUserName(name);
+    notifyListeners();
   }
 
-  // ── ADD — dengan validasi saldo ───────────────────────────────────────────
-  BalanceResult addTransaction(Transaction transaction) {
-    // Validasi saldo untuk expense
-    if (transaction.type == TransactionType.expense) {
-      final currentBalance = balanceOf(transaction.paymentMethod);
-      if (transaction.amount > currentBalance) {
+  // ── Simpan semua state ke storage ─────────────────────────────────────────
+  Future<void> _persist() async {
+    await _storage.saveBalances(
+      cash:   _cashBalance,
+      card:   _cardBalance,
+      emoney: _eMoneyBalance,
+    );
+    await _storage.saveTransactions(_transactions);
+    await _storage.saveCategories(_categories);
+  }
+
+  // ── ADD ───────────────────────────────────────────────────────────────────
+  BalanceResult addTransaction(Transaction tx) {
+    if (tx.type == TransactionType.expense) {
+      final bal = balanceOf(tx.paymentMethod);
+      if (tx.amount > bal) {
         return BalanceResult.error(
-          'Saldo ${methodName(transaction.paymentMethod)} tidak cukup.\n'
-          'Saldo: ${formatRupiah(currentBalance)}\n'
-          'Dibutuhkan: ${formatRupiah(transaction.amount)}',
+          'Saldo ${methodName(tx.paymentMethod)} tidak cukup.\n'
+          'Saldo: ${formatRupiah(bal)}\n'
+          'Dibutuhkan: ${formatRupiah(tx.amount)}',
         );
       }
     }
-
-    _transactions.add(transaction);
-    if (transaction.type == TransactionType.expense && !transaction.isTransfer) {
-      final idx = _categories.indexWhere((c) => c.id == transaction.categoryId);
-      if (idx != -1) _categories[idx].spent += transaction.amount;
+    _transactions.add(tx);
+    if (tx.type == TransactionType.expense && !tx.isTransfer) {
+      final i = _categories.indexWhere((c) => c.id == tx.categoryId);
+      if (i != -1) _categories[i].spent += tx.amount;
     }
-    final sign = transaction.type == TransactionType.expense ? -1 : 1;
-    _adjustBalance(transaction.paymentMethod, sign * transaction.amount);
+    _adjustBalance(tx.paymentMethod,
+        tx.type == TransactionType.expense ? -tx.amount : tx.amount);
+    _persist();
     notifyListeners();
     return const BalanceResult.ok();
   }
@@ -164,48 +142,37 @@ class AppState extends ChangeNotifier {
     required DateTime date,
     String? note,
   }) {
-    // Validasi saldo sumber
-    final sourceBalance = balanceOf(from);
-    if (amount > sourceBalance) {
+    if (from == to) {
+      return BalanceResult.error('Sumber dan tujuan tidak boleh sama.');
+    }
+    final src = balanceOf(from);
+    if (amount > src) {
       return BalanceResult.error(
         'Saldo ${methodName(from)} tidak cukup untuk transfer.\n'
-        'Saldo: ${formatRupiah(sourceBalance)}\n'
+        'Saldo: ${formatRupiah(src)}\n'
         'Dibutuhkan: ${formatRupiah(amount)}',
       );
     }
-    if (from == to) {
-      return BalanceResult.error('Sumber dan tujuan transfer tidak boleh sama.');
-    }
-
     _adjustBalance(from, -amount);
-    _adjustBalance(to, amount);
-    _transactions.add(Transaction(
-      id: _uuid.v4(),
-      title: note?.isNotEmpty == true ? note! : 'Transfer → ${methodName(to)}',
-      amount: amount,
-      type: TransactionType.expense,
-      paymentMethod: from,
-      date: date,
-      categoryId: 'transfer',
-      note: note,
-      isTransfer: true,
-    ));
-    _transactions.add(Transaction(
-      id: _uuid.v4(),
-      title: note?.isNotEmpty == true ? note! : 'Transfer ← ${methodName(from)}',
-      amount: amount,
-      type: TransactionType.income,
-      paymentMethod: to,
-      date: date,
-      categoryId: 'transfer',
-      note: note,
-      isTransfer: true,
-    ));
+    _adjustBalance(to,    amount);
+    _transactions.addAll([
+      Transaction(
+        id: _uuid.v4(), title: note?.isNotEmpty == true ? note! : 'Transfer → ${methodName(to)}',
+        amount: amount, type: TransactionType.expense, paymentMethod: from,
+        date: date, categoryId: 'transfer', note: note, isTransfer: true,
+      ),
+      Transaction(
+        id: _uuid.v4(), title: note?.isNotEmpty == true ? note! : 'Transfer ← ${methodName(from)}',
+        amount: amount, type: TransactionType.income, paymentMethod: to,
+        date: date, categoryId: 'transfer', note: note, isTransfer: true,
+      ),
+    ]);
+    _persist();
     notifyListeners();
     return const BalanceResult.ok();
   }
 
-  // ── EDIT — dengan validasi saldo ──────────────────────────────────────────
+  // ── EDIT ──────────────────────────────────────────────────────────────────
   BalanceResult editTransaction({
     required String id,
     required String newTitle,
@@ -221,63 +188,43 @@ class AppState extends ChangeNotifier {
 
     final old = _transactions[idx];
 
-    // Hitung saldo setelah reverse transaksi lama
-    final oldSign = old.type == TransactionType.expense ? -1 : 1;
-    double simulatedBalance = balanceOf(newPaymentMethod);
-    // Jika payment method sama, tambahkan balik efek lama
-    if (old.paymentMethod == newPaymentMethod) {
-      simulatedBalance -= oldSign * old.amount; // reverse
-    }
-
-    // Validasi saldo untuk transaksi baru (jika expense)
+    // Validasi: hitung saldo tersedia setelah reverse lama
     if (newType == TransactionType.expense) {
-      // Kalkulasi saldo yang tersedia setelah reverse lama
-      double availableBalance = balanceOf(newPaymentMethod);
+      double avail = balanceOf(newPaymentMethod);
       if (old.paymentMethod == newPaymentMethod) {
-        final oldSignForReverse = old.type == TransactionType.expense ? 1 : -1;
-        availableBalance += oldSignForReverse * old.amount;
+        avail += old.type == TransactionType.expense ? old.amount : -old.amount;
       }
-      if (newAmount > availableBalance) {
+      if (newAmount > avail) {
         return BalanceResult.error(
           'Saldo ${methodName(newPaymentMethod)} tidak cukup.\n'
-          'Tersedia: ${formatRupiah(availableBalance)}\n'
+          'Tersedia: ${formatRupiah(avail)}\n'
           'Dibutuhkan: ${formatRupiah(newAmount)}',
         );
       }
     }
 
-    // Balik efek lama ke balance
-    _adjustBalance(old.paymentMethod, -oldSign * old.amount);
-
-    // Balik efek lama ke category spent
+    // Reverse efek lama
+    _adjustBalance(old.paymentMethod,
+        old.type == TransactionType.expense ? old.amount : -old.amount);
     if (old.type == TransactionType.expense && !old.isTransfer) {
-      final catIdx = _categories.indexWhere((c) => c.id == old.categoryId);
-      if (catIdx != -1) _categories[catIdx].spent -= old.amount;
+      final i = _categories.indexWhere((c) => c.id == old.categoryId);
+      if (i != -1) _categories[i].spent -= old.amount;
     }
 
-    final updated = Transaction(
-      id: id,
-      title: newTitle,
-      amount: newAmount,
-      type: newType,
-      paymentMethod: newPaymentMethod,
-      date: newDate,
-      categoryId: newCategoryId,
-      note: newNote,
-      isTransfer: old.isTransfer,
+    // Terapkan baru
+    _transactions[idx] = Transaction(
+      id: id, title: newTitle, amount: newAmount, type: newType,
+      paymentMethod: newPaymentMethod, date: newDate,
+      categoryId: newCategoryId, note: newNote, isTransfer: old.isTransfer,
     );
-    _transactions[idx] = updated;
-
-    // Terapkan efek baru ke balance
-    final newSign = newType == TransactionType.expense ? -1 : 1;
-    _adjustBalance(newPaymentMethod, newSign * newAmount);
-
-    // Terapkan efek baru ke category spent
+    _adjustBalance(newPaymentMethod,
+        newType == TransactionType.expense ? -newAmount : newAmount);
     if (newType == TransactionType.expense && !old.isTransfer) {
-      final catIdx = _categories.indexWhere((c) => c.id == newCategoryId);
-      if (catIdx != -1) _categories[catIdx].spent += newAmount;
+      final i = _categories.indexWhere((c) => c.id == newCategoryId);
+      if (i != -1) _categories[i].spent += newAmount;
     }
 
+    _persist();
     notifyListeners();
     return const BalanceResult.ok();
   }
@@ -287,58 +234,46 @@ class AppState extends ChangeNotifier {
     final idx = _transactions.indexWhere((t) => t.id == id);
     if (idx == -1) return;
     final t = _transactions[idx];
-    final sign = t.type == TransactionType.expense ? -1 : 1;
-    _adjustBalance(t.paymentMethod, -sign * t.amount);
+    _adjustBalance(t.paymentMethod,
+        t.type == TransactionType.expense ? t.amount : -t.amount);
     if (t.type == TransactionType.expense && !t.isTransfer) {
-      final catIdx = _categories.indexWhere((c) => c.id == t.categoryId);
-      if (catIdx != -1) _categories[catIdx].spent -= t.amount;
+      final i = _categories.indexWhere((c) => c.id == t.categoryId);
+      if (i != -1) _categories[i].spent -= t.amount;
     }
     _transactions.removeAt(idx);
+    _persist();
     notifyListeners();
   }
 
-  // ── UPDATE CATEGORY BUDGET — monthly budget otomatis menyesuaikan ─────────
+  // ── UPDATE CATEGORY BUDGET ────────────────────────────────────────────────
   void updateCategoryBudget(String categoryId, double newBudget) {
-    final idx = _categories.indexWhere((c) => c.id == categoryId);
-    if (idx != -1) {
-      _categories[idx] = Category(
-        id: _categories[idx].id,
-        name: _categories[idx].name,
-        icon: _categories[idx].icon,
-        budget: newBudget,
-        spent: _categories[idx].spent,
-      );
-      notifyListeners();
-    }
+    final i = _categories.indexWhere((c) => c.id == categoryId);
+    if (i == -1) return;
+    _categories[i] = Category(
+      id: _categories[i].id, name: _categories[i].name,
+      icon: _categories[i].icon, budget: newBudget, spent: _categories[i].spent,
+    );
+    _persist();
+    notifyListeners();
   }
 
   // ── HELPERS ───────────────────────────────────────────────────────────────
-  void _adjustBalance(PaymentMethod method, double delta) {
-    switch (method) {
-      case PaymentMethod.cash:
-        _cashBalance += delta;
-        break;
-      case PaymentMethod.card:
-        _cardBalance += delta;
-        break;
-      case PaymentMethod.emoney:
-        _eMoneyBalance += delta;
-        break;
+  void _adjustBalance(PaymentMethod m, double delta) {
+    switch (m) {
+      case PaymentMethod.cash:   _cashBalance   += delta; break;
+      case PaymentMethod.card:   _cardBalance   += delta; break;
+      case PaymentMethod.emoney: _eMoneyBalance += delta; break;
     }
   }
 
   Category? getCategoryById(String id) {
-    try {
-      return _categories.firstWhere((c) => c.id == id);
-    } catch (_) {
-      return null;
-    }
+    try { return _categories.firstWhere((c) => c.id == id); }
+    catch (_) { return null; }
   }
 
   String formatRupiah(double amount) {
-    final abs = amount.abs();
-    final formatted = abs.toStringAsFixed(0).replaceAllMapped(
-        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.');
-    return 'Rp$formatted';
+    final s = amount.abs().toStringAsFixed(0)
+        .replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.');
+    return 'Rp$s';
   }
 }

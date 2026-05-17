@@ -77,13 +77,81 @@ class _AddTransactionSheetState extends State<AddTransactionSheet>
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: AppColors.red,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
+    // Pakai dialog supaya langsung muncul di dalam sheet, bukan setelah close
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.red.withOpacity(0.4), width: 1.5),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Icon
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: AppColors.red.withOpacity(0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.account_balance_wallet_outlined,
+                    color: AppColors.red, size: 28),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Saldo Tidak Cukup',
+                style: TextStyle(
+                    color: AppColors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
+              // Parse pesan menjadi baris-baris yang rapi
+              ...message.split('\n').map((line) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      line,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: line.startsWith('Dibutuhkan')
+                            ? AppColors.red
+                            : line.startsWith('Saldo')
+                                ? AppColors.green
+                                : AppColors.grey,
+                        fontSize: 13,
+                        fontWeight: line.startsWith('Saldo') || line.startsWith('Dibutuhkan')
+                            ? FontWeight.w600
+                            : FontWeight.normal,
+                      ),
+                    ),
+                  )),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.red,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    elevation: 0,
+                  ),
+                  child: const Text('Mengerti',
+                      style: TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
