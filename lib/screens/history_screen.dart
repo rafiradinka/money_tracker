@@ -202,7 +202,7 @@ class _EditTransactionSheetState extends State<_EditTransactionSheet> {
     final category = widget.state.getCategoryById(_categoryId);
     final title = desc.isEmpty ? (category?.name ?? _categoryId) : desc;
 
-    widget.state.editTransaction(
+    final result = widget.state.editTransaction(
       id: widget.transaction.id,
       newTitle: title,
       newAmount: amount,
@@ -212,6 +212,17 @@ class _EditTransactionSheetState extends State<_EditTransactionSheet> {
       newCategoryId: _categoryId,
       newNote: desc.isEmpty ? null : desc,
     );
+
+    if (!result.success) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(result.errorMessage ?? 'Terjadi kesalahan'),
+        backgroundColor: const Color(0xFFF44336),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+      ));
+      return;
+    }
 
     Navigator.pop(context);
   }

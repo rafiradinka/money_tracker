@@ -48,6 +48,8 @@ class _AddTransactionSheetState extends State<AddTransactionSheet>
     super.dispose();
   }
 
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
   String _formattedDate(DateTime dt) {
     const months = [
       'Jan','Feb','Mar','Apr','May','Jun',
@@ -74,6 +76,18 @@ class _AddTransactionSheetState extends State<AddTransactionSheet>
     if (date != null) setState(() => _selectedDate = date);
   }
 
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.red,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+      ),
+    );
+  }
+
   void _save() {
     final state = context.read<AppState>();
     final amount = double.tryParse(
@@ -81,20 +95,17 @@ class _AddTransactionSheetState extends State<AddTransactionSheet>
     );
 
     if (amount == null || amount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Masukkan jumlah yang valid'),
-          backgroundColor: AppColors.red,
-        ),
-      );
+      _showError('Masukkan jumlah yang valid');
       return;
     }
 
     final tabIndex = _tabController.index;
     final description = _noteController.text.trim();
+    BalanceResult result;
 
     if (tabIndex == 2) {
-      state.addTransfer(
+      // Transfer
+      result = state.addTransfer(
         amount: amount,
         from: _paymentMethod,
         to: _transferTo,
@@ -106,15 +117,14 @@ class _AddTransactionSheetState extends State<AddTransactionSheet>
           ? TransactionType.expense
           : TransactionType.income;
 
-      // Fallback ke nama category jika deskripsi kosong
       final category = state.getCategoryById(_selectedCategoryId);
       final title = description.isEmpty
           ? (category?.name ?? _selectedCategoryId)
           : description;
 
-      state.addTransaction(Transaction(
+      result = state.addTransaction(Transaction(
         id: _uuid.v4(),
-        title: title,           // ← ini yang tampil di history
+        title: title,
         amount: amount,
         type: type,
         paymentMethod: _paymentMethod,
@@ -124,8 +134,15 @@ class _AddTransactionSheetState extends State<AddTransactionSheet>
       ));
     }
 
+    if (!result.success) {
+      _showError(result.errorMessage ?? 'Terjadi kesalahan');
+      return;
+    }
+
     Navigator.pop(context);
   }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -165,7 +182,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet>
                 ),
               ),
 
-              // Tab bar
+              // Tab bar: Expense / Income / Transfer
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                 child: Container(
@@ -184,9 +201,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet>
                     labelColor: AppColors.white,
                     unselectedLabelColor: AppColors.grey,
                     labelStyle: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                    ),
+                        fontWeight: FontWeight.w600, fontSize: 13),
                     tabs: const [
                       Tab(text: 'Expense'),
                       Tab(text: 'Income'),
@@ -196,6 +211,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet>
                 ),
               ),
 
+              // Scrollable form
               Expanded(
                 child: SingleChildScrollView(
                   controller: scrollController,
@@ -205,14 +221,13 @@ class _AddTransactionSheetState extends State<AddTransactionSheet>
                     children: [
                       const SizedBox(height: 24),
 
-                      // Amount display
+                      // ── Amount ─────────────────────────────────────────
                       Center(
                         child: Column(
                           children: [
-                            const Text(
-                              'Rp',
-                              style: TextStyle(color: AppColors.grey, fontSize: 16),
-                            ),
+                            const Text('Rp',
+                                style: TextStyle(
+                                    color: AppColors.grey, fontSize: 16)),
                             const SizedBox(height: 4),
                             SizedBox(
                               width: double.infinity,
@@ -242,12 +257,12 @@ class _AddTransactionSheetState extends State<AddTransactionSheet>
                       ),
                       const SizedBox(height: 28),
 
-                      // ── Payment Method ──────────────────────────────────
+                      // ── Payment Method ─────────────────────────────────
                       _sectionLabel('Payment Method'),
                       const SizedBox(height: 10),
 
                       if (tab == 2) ...[
-                        // Transfer: from & to
+                        // Transfer: from → to
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -256,61 +271,73 @@ class _AddTransactionSheetState extends State<AddTransactionSheet>
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   const Text('From',
-                                      style: TextStyle(color: AppColors.grey, fontSize: 11)),
+                                      style: TextStyle(
+                                          color: AppColors.grey, fontSize: 11)),
                                   const SizedBox(height: 8),
                                   _PaymentChip(
                                     icon: Icons.account_balance_wallet_outlined,
                                     label: 'Cash',
                                     selected: _paymentMethod == PaymentMethod.cash,
-                                    onTap: () => setState(() => _paymentMethod = PaymentMethod.cash),
+                                    onTap: () => setState(
+                                        () => _paymentMethod = PaymentMethod.cash),
                                   ),
                                   const SizedBox(height: 6),
                                   _PaymentChip(
                                     icon: Icons.credit_card_outlined,
                                     label: 'Card',
                                     selected: _paymentMethod == PaymentMethod.card,
-                                    onTap: () => setState(() => _paymentMethod = PaymentMethod.card),
+                                    onTap: () => setState(
+                                        () => _paymentMethod = PaymentMethod.card),
                                   ),
                                   const SizedBox(height: 6),
                                   _PaymentChip(
                                     icon: Icons.phone_android_outlined,
                                     label: 'E-Money',
-                                    selected: _paymentMethod == PaymentMethod.emoney,
-                                    onTap: () => setState(() => _paymentMethod = PaymentMethod.emoney),
+                                    selected:
+                                        _paymentMethod == PaymentMethod.emoney,
+                                    onTap: () => setState(
+                                        () => _paymentMethod = PaymentMethod.emoney),
                                   ),
                                 ],
                               ),
                             ),
                             const Padding(
-                              padding: EdgeInsets.only(top: 28, left: 8, right: 8),
-                              child: Icon(Icons.arrow_forward, color: AppColors.grey, size: 20),
+                              padding:
+                                  EdgeInsets.only(top: 28, left: 8, right: 8),
+                              child: Icon(Icons.arrow_forward,
+                                  color: AppColors.grey, size: 20),
                             ),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   const Text('To',
-                                      style: TextStyle(color: AppColors.grey, fontSize: 11)),
+                                      style: TextStyle(
+                                          color: AppColors.grey, fontSize: 11)),
                                   const SizedBox(height: 8),
                                   _PaymentChip(
                                     icon: Icons.account_balance_wallet_outlined,
                                     label: 'Cash',
                                     selected: _transferTo == PaymentMethod.cash,
-                                    onTap: () => setState(() => _transferTo = PaymentMethod.cash),
+                                    onTap: () => setState(
+                                        () => _transferTo = PaymentMethod.cash),
                                   ),
                                   const SizedBox(height: 6),
                                   _PaymentChip(
                                     icon: Icons.credit_card_outlined,
                                     label: 'Card',
                                     selected: _transferTo == PaymentMethod.card,
-                                    onTap: () => setState(() => _transferTo = PaymentMethod.card),
+                                    onTap: () => setState(
+                                        () => _transferTo = PaymentMethod.card),
                                   ),
                                   const SizedBox(height: 6),
                                   _PaymentChip(
                                     icon: Icons.phone_android_outlined,
                                     label: 'E-Money',
-                                    selected: _transferTo == PaymentMethod.emoney,
-                                    onTap: () => setState(() => _transferTo = PaymentMethod.emoney),
+                                    selected:
+                                        _transferTo == PaymentMethod.emoney,
+                                    onTap: () => setState(
+                                        () => _transferTo = PaymentMethod.emoney),
                                   ),
                                 ],
                               ),
@@ -318,6 +345,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet>
                           ],
                         ),
                       ] else ...[
+                        // Expense / Income: single payment method
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
@@ -326,25 +354,28 @@ class _AddTransactionSheetState extends State<AddTransactionSheet>
                               icon: Icons.account_balance_wallet_outlined,
                               label: 'Cash',
                               selected: _paymentMethod == PaymentMethod.cash,
-                              onTap: () => setState(() => _paymentMethod = PaymentMethod.cash),
+                              onTap: () => setState(
+                                  () => _paymentMethod = PaymentMethod.cash),
                             ),
                             _PaymentChip(
                               icon: Icons.credit_card_outlined,
                               label: 'Card',
                               selected: _paymentMethod == PaymentMethod.card,
-                              onTap: () => setState(() => _paymentMethod = PaymentMethod.card),
+                              onTap: () => setState(
+                                  () => _paymentMethod = PaymentMethod.card),
                             ),
                             _PaymentChip(
                               icon: Icons.phone_android_outlined,
                               label: 'E-Money',
                               selected: _paymentMethod == PaymentMethod.emoney,
-                              onTap: () => setState(() => _paymentMethod = PaymentMethod.emoney),
+                              onTap: () => setState(
+                                  () => _paymentMethod = PaymentMethod.emoney),
                             ),
                           ],
                         ),
                       ],
 
-                      // ── Category ────────────────────────────────────────
+                      // ── Category (expense & income only) ──────────────
                       if (tab != 2) ...[
                         const SizedBox(height: 20),
                         _sectionLabel('Category'),
@@ -357,9 +388,11 @@ class _AddTransactionSheetState extends State<AddTransactionSheet>
                               return Padding(
                                 padding: const EdgeInsets.only(right: 8),
                                 child: GestureDetector(
-                                  onTap: () => setState(() => _selectedCategoryId = cat.id),
+                                  onTap: () => setState(
+                                      () => _selectedCategoryId = cat.id),
                                   child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 200),
+                                    duration:
+                                        const Duration(milliseconds: 200),
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 14, vertical: 8),
                                     decoration: BoxDecoration(
@@ -376,12 +409,16 @@ class _AddTransactionSheetState extends State<AddTransactionSheet>
                                     ),
                                     child: Row(
                                       children: [
-                                        Text(cat.icon, style: const TextStyle(fontSize: 16)),
+                                        Text(cat.icon,
+                                            style: const TextStyle(
+                                                fontSize: 16)),
                                         const SizedBox(width: 6),
                                         Text(
                                           cat.name,
                                           style: TextStyle(
-                                            color: selected ? accentColor : AppColors.grey,
+                                            color: selected
+                                                ? accentColor
+                                                : AppColors.grey,
                                             fontSize: 13,
                                             fontWeight: selected
                                                 ? FontWeight.w600
@@ -398,7 +435,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet>
                         ),
                       ],
 
-                      // ── Date & Time ─────────────────────────────────────
+                      // ── Date & Time ────────────────────────────────────
                       const SizedBox(height: 20),
                       _sectionLabel('Date & Time'),
                       const SizedBox(height: 10),
@@ -429,7 +466,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet>
                         ),
                       ),
 
-                      // ── Description / Catatan ──────────────────────────
+                      // ── Deskripsi ──────────────────────────────────────
                       const SizedBox(height: 20),
                       Row(
                         children: [
@@ -438,9 +475,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet>
                           const Text(
                             '· akan tampil di riwayat',
                             style: TextStyle(
-                              color: AppColors.greyDark,
-                              fontSize: 11,
-                            ),
+                                color: AppColors.greyDark, fontSize: 11),
                           ),
                         ],
                       ),
@@ -468,14 +503,15 @@ class _AddTransactionSheetState extends State<AddTransactionSheet>
 
                       const SizedBox(height: 28),
 
-                      // ── Add button ──────────────────────────────────────
+                      // ── Save button ────────────────────────────────────
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
                           onPressed: _save,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: accentColor,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14),
                             ),
@@ -506,13 +542,12 @@ class _AddTransactionSheetState extends State<AddTransactionSheet>
     return Text(
       text,
       style: const TextStyle(
-        color: AppColors.grey,
-        fontSize: 13,
-        fontWeight: FontWeight.w500,
-      ),
+          color: AppColors.grey, fontSize: 13, fontWeight: FontWeight.w500),
     );
   }
 }
+
+// ── Payment Chip widget ───────────────────────────────────────────────────────
 
 class _PaymentChip extends StatelessWidget {
   final IconData icon;
@@ -535,7 +570,9 @@ class _PaymentChip extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
         decoration: BoxDecoration(
-          color: selected ? AppColors.orange.withOpacity(0.15) : AppColors.card,
+          color: selected
+              ? AppColors.orange.withOpacity(0.15)
+              : AppColors.card,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: selected ? AppColors.orange : Colors.transparent,
@@ -545,18 +582,17 @@ class _PaymentChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              color: selected ? AppColors.orange : AppColors.grey,
-              size: 16,
-            ),
+            Icon(icon,
+                color: selected ? AppColors.orange : AppColors.grey,
+                size: 16),
             const SizedBox(width: 6),
             Text(
               label,
               style: TextStyle(
                 color: selected ? AppColors.orange : AppColors.grey,
                 fontSize: 13,
-                fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                fontWeight:
+                    selected ? FontWeight.w600 : FontWeight.normal,
               ),
             ),
           ],
