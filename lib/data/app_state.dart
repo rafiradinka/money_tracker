@@ -4,9 +4,9 @@ import '../models/models.dart';
 import 'storage_service.dart';
 
 class BalanceResult {
-  final bool success;
+  final bool    success;
   final String? errorMessage;
-  const BalanceResult.ok() : success = true, errorMessage = null;
+  const BalanceResult.ok()                : success = true,  errorMessage = null;
   const BalanceResult.error(this.errorMessage) : success = false;
 }
 
@@ -15,8 +15,8 @@ class AppState extends ChangeNotifier {
   final _storage = StorageService.instance;
 
   String _userName      = '';
-  double _cashBalance   = 800000;
-  double _cardBalance   = 12000000;
+  double _cashBalance   = 0;
+  double _cardBalance   = 0;
   double _eMoneyBalance = 0;
 
   List<Transaction> _transactions = [];
@@ -30,10 +30,21 @@ class AppState extends ChangeNotifier {
   double get totalBalance  => _cashBalance + _cardBalance + _eMoneyBalance;
 
   List<Transaction> get transactions => List.unmodifiable(_transactions);
-  List<Category>    get categories   => List.unmodifiable(_categories);
 
+  // Semua kategori
+  List<Category> get categories => List.unmodifiable(_categories);
+
+  // Hanya kategori expense (untuk budget & add expense)
+  List<Category> get expenseCategories =>
+      _categories.where((c) => c.categoryType == CategoryType.expense).toList();
+
+  // Hanya kategori income (untuk add income)
+  List<Category> get incomeCategories =>
+      _categories.where((c) => c.categoryType == CategoryType.income).toList();
+
+  // Monthly budget = total budget kategori expense saja
   double get monthlyBudget =>
-      _categories.fold(0.0, (s, c) => s + c.budget);
+      expenseCategories.fold(0.0, (s, c) => s + c.budget);
 
   double get totalSpentThisMonth {
     final now = DateTime.now();
@@ -42,7 +53,7 @@ class AppState extends ChangeNotifier {
             t.type == TransactionType.expense &&
             !t.isTransfer &&
             t.date.month == now.month &&
-            t.date.year == now.year)
+            t.date.year  == now.year)
         .fold(0.0, (s, t) => s + t.amount);
   }
 
@@ -82,7 +93,7 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  // ── Init — load dari storage ───────────────────────────────────────────────
+  // ── Init ──────────────────────────────────────────────────────────────────
   Future<void> loadFromStorage() async {
     _userName      = _storage.userName;
     _cashBalance   = _storage.cashBalance;
@@ -93,25 +104,21 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── User name ─────────────────────────────────────────────────────────────
   Future<void> setUserName(String name) async {
     _userName = name;
     await _storage.saveUserName(name);
     notifyListeners();
   }
 
-  // ── Simpan semua state ke storage ─────────────────────────────────────────
   Future<void> _persist() async {
     await _storage.saveBalances(
-      cash:   _cashBalance,
-      card:   _cardBalance,
-      emoney: _eMoneyBalance,
+      cash: _cashBalance, card: _cardBalance, emoney: _eMoneyBalance,
     );
     await _storage.saveTransactions(_transactions);
     await _storage.saveCategories(_categories);
   }
 
-  // ── ADD ───────────────────────────────────────────────────────────────────
+  // ── ADD Transaction ───────────────────────────────────────────────────────
   BalanceResult addTransaction(Transaction tx) {
     if (tx.type == TransactionType.expense) {
       final bal = balanceOf(tx.paymentMethod);
@@ -136,19 +143,14 @@ class AppState extends ChangeNotifier {
   }
 
   BalanceResult addTransfer({
-    required double amount,
-    required PaymentMethod from,
-    required PaymentMethod to,
-    required DateTime date,
-    String? note,
+    required double amount, required PaymentMethod from,
+    required PaymentMethod to, required DateTime date, String? note,
   }) {
-    if (from == to) {
-      return BalanceResult.error('Sumber dan tujuan tidak boleh sama.');
-    }
+    if (from == to) return BalanceResult.error('Sumber dan tujuan tidak boleh sama.');
     final src = balanceOf(from);
     if (amount > src) {
       return BalanceResult.error(
-        'Saldo ${methodName(from)} tidak cukup untuk transfer.\n'
+        'Saldo ${methodName(from)} tidak cukup.\n'
         'Saldo: ${formatRupiah(src)}\n'
         'Dibutuhkan: ${formatRupiah(amount)}',
       );
@@ -156,39 +158,30 @@ class AppState extends ChangeNotifier {
     _adjustBalance(from, -amount);
     _adjustBalance(to,    amount);
     _transactions.addAll([
-      Transaction(
-        id: _uuid.v4(), title: note?.isNotEmpty == true ? note! : 'Transfer → ${methodName(to)}',
+      Transaction(id: _uuid.v4(),
+        title: note?.isNotEmpty == true ? note! : 'Transfer → ${methodName(to)}',
         amount: amount, type: TransactionType.expense, paymentMethod: from,
-        date: date, categoryId: 'transfer', note: note, isTransfer: true,
-      ),
-      Transaction(
-        id: _uuid.v4(), title: note?.isNotEmpty == true ? note! : 'Transfer ← ${methodName(from)}',
+        date: date, categoryId: 'transfer', note: note, isTransfer: true),
+      Transaction(id: _uuid.v4(),
+        title: note?.isNotEmpty == true ? note! : 'Transfer ← ${methodName(from)}',
         amount: amount, type: TransactionType.income, paymentMethod: to,
-        date: date, categoryId: 'transfer', note: note, isTransfer: true,
-      ),
+        date: date, categoryId: 'transfer', note: note, isTransfer: true),
     ]);
     _persist();
     notifyListeners();
     return const BalanceResult.ok();
   }
 
-  // ── EDIT ──────────────────────────────────────────────────────────────────
+  // ── EDIT Transaction ──────────────────────────────────────────────────────
   BalanceResult editTransaction({
-    required String id,
-    required String newTitle,
-    required double newAmount,
-    required TransactionType newType,
-    required PaymentMethod newPaymentMethod,
-    required DateTime newDate,
-    required String newCategoryId,
-    String? newNote,
+    required String id, required String newTitle, required double newAmount,
+    required TransactionType newType, required PaymentMethod newPaymentMethod,
+    required DateTime newDate, required String newCategoryId, String? newNote,
   }) {
     final idx = _transactions.indexWhere((t) => t.id == id);
     if (idx == -1) return BalanceResult.error('Transaksi tidak ditemukan.');
-
     final old = _transactions[idx];
 
-    // Validasi: hitung saldo tersedia setelah reverse lama
     if (newType == TransactionType.expense) {
       double avail = balanceOf(newPaymentMethod);
       if (old.paymentMethod == newPaymentMethod) {
@@ -203,7 +196,7 @@ class AppState extends ChangeNotifier {
       }
     }
 
-    // Reverse efek lama
+    // Reverse lama
     _adjustBalance(old.paymentMethod,
         old.type == TransactionType.expense ? old.amount : -old.amount);
     if (old.type == TransactionType.expense && !old.isTransfer) {
@@ -229,7 +222,7 @@ class AppState extends ChangeNotifier {
     return const BalanceResult.ok();
   }
 
-  // ── DELETE ────────────────────────────────────────────────────────────────
+  // ── DELETE Transaction ────────────────────────────────────────────────────
   void deleteTransaction(String id) {
     final idx = _transactions.indexWhere((t) => t.id == id);
     if (idx == -1) return;
@@ -245,13 +238,62 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── UPDATE CATEGORY BUDGET ────────────────────────────────────────────────
+  // ── CATEGORY CRUD ─────────────────────────────────────────────────────────
+  void addCategory({
+    required String       name,
+    required String       icon,
+    required CategoryType categoryType,
+    required double       budget,
+  }) {
+    _categories = [
+      ..._categories,
+      Category(id: _uuid.v4(), name: name, icon: icon,
+               categoryType: categoryType, budget: budget),
+    ];
+    _persist();
+    notifyListeners();
+  }
+
+  void editCategory({
+    required String       id,
+    required String       newName,
+    required String       newIcon,
+    required CategoryType newCategoryType,
+    required double       newBudget,
+  }) {
+    final i = _categories.indexWhere((c) => c.id == id);
+    if (i == -1) return;
+    final old = _categories[i];
+    _categories[i] = Category(
+      id: old.id, name: newName, icon: newIcon,
+      categoryType: newCategoryType, budget: newBudget, spent: old.spent,
+    );
+    _persist();
+    notifyListeners();
+  }
+
+  void deleteCategory(String id) {
+    _categories = _categories.where((c) => c.id != id).toList();
+    _persist();
+    notifyListeners();
+  }
+
+  void reorderCategories(int oldIndex, int newIndex) {
+    if (newIndex > oldIndex) newIndex -= 1;
+    final list = List<Category>.from(_categories);
+    list.insert(newIndex, list.removeAt(oldIndex));
+    _categories = list;
+    _persist();
+    notifyListeners();
+  }
+
   void updateCategoryBudget(String categoryId, double newBudget) {
     final i = _categories.indexWhere((c) => c.id == categoryId);
     if (i == -1) return;
+    final old = _categories[i];
     _categories[i] = Category(
-      id: _categories[i].id, name: _categories[i].name,
-      icon: _categories[i].icon, budget: newBudget, spent: _categories[i].spent,
+      id: old.id, name: old.name, icon: old.icon,
+      categoryType: old.categoryType, budget: newBudget, spent: old.spent,
     );
     _persist();
     notifyListeners();

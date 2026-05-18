@@ -166,10 +166,15 @@ class _EditTransactionSheetState extends State<_EditTransactionSheet> {
       'Jan','Feb','Mar','Apr','May','Jun',
       'Jul','Aug','Sep','Oct','Nov','Dec',
     ];
-    return '${dt.day} ${months[dt.month - 1]} ${dt.year}';
+    final h = dt.hour.toString().padLeft(2, '0');
+    final m = dt.minute.toString().padLeft(2, '0');
+    return '${dt.day} ${months[dt.month - 1]} ${dt.year}, $h:$m';
   }
 
-  Future<void> _pickDate() async {
+  Future<void> _pickDateTime() async {
+    final currentHour   = _date.hour;
+    final currentMinute = _date.minute;
+
     final date = await showDatePicker(
       context: context,
       initialDate: _date,
@@ -182,7 +187,28 @@ class _EditTransactionSheetState extends State<_EditTransactionSheet> {
         child: child!,
       ),
     );
-    if (date != null) setState(() => _date = date);
+    if (date == null || !mounted) return;
+
+    setState(() {
+      _date = DateTime(date.year, date.month, date.day, currentHour, currentMinute);
+    });
+
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: currentHour, minute: currentMinute),
+      builder: (ctx, child) => Theme(
+        data: ThemeData.dark().copyWith(
+          colorScheme: const ColorScheme.dark(primary: AppColors.orange),
+        ),
+        child: child!,
+      ),
+    );
+    if (!mounted) return;
+    if (time != null) {
+      setState(() {
+        _date = DateTime(_date.year, _date.month, _date.day, time.hour, time.minute);
+      });
+    }
   }
 
   void _save() {
@@ -536,7 +562,7 @@ class _EditTransactionSheetState extends State<_EditTransactionSheet> {
                       _label('Tanggal'),
                       const SizedBox(height: 8),
                       GestureDetector(
-                        onTap: _pickDate,
+                        onTap: _pickDateTime,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 14, vertical: 12),

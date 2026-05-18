@@ -181,9 +181,9 @@ class BudgetDetailScreen extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  ...state.categories.asMap().entries.map((entry) {
+                  ...state.expenseCategories.asMap().entries.map((entry) {
                     final cat = entry.value;
-                    final isLast = entry.key == state.categories.length - 1;
+                    final isLast = entry.key == state.expenseCategories.length - 1;
                     return Column(
                       children: [
                         GestureDetector(
